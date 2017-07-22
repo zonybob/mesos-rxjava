@@ -85,18 +85,22 @@ public final class MesosClient<Send, Receive> {
     @NotNull
     private final AtomicReference<String> mesosStreamId = new AtomicReference<>(null);
 
+    @NotNull
+    private final Observable.Transformer<byte[], byte[]> byteStreamTransformer;
+
     MesosClient(
-        @NotNull final URI mesosUri,
-        @NotNull final Function<Class<?>, UserAgentEntry> applicationUserAgentEntry,
-        @NotNull final MessageCodec<Send> sendCodec,
-        @NotNull final MessageCodec<Receive> receiveCodec,
-        @NotNull final Send subscribe,
-        @NotNull final Function<Observable<Receive>, Observable<Optional<SinkOperation<Send>>>> streamProcessor
-    ) {
+            @NotNull final URI mesosUri,
+            @NotNull final Function<Class<?>, UserAgentEntry> applicationUserAgentEntry,
+            @NotNull final MessageCodec<Send> sendCodec,
+            @NotNull final MessageCodec<Receive> receiveCodec,
+            @NotNull final Send subscribe,
+            @NotNull final Function<Observable<Receive>, Observable<Optional<SinkOperation<Send>>>> streamProcessor,
+            @NotNull final  Observable.Transformer<byte[], byte[]> byteStreamTransformer) {
         this.mesosUri = mesosUri;
         this.receiveCodec = receiveCodec;
         this.subscribe = subscribe;
         this.streamProcessor = streamProcessor;
+        this.byteStreamTransformer = byteStreamTransformer;
 
         userAgent = new UserAgent(
             applicationUserAgentEntry,
@@ -132,6 +136,7 @@ public final class MesosClient<Send, Receive> {
             .subscribeOn(Rx.io())
             .flatMap(verifyResponseOk(subscribe, mesosStreamId, receiveCodec.mediaType()))
             .lift(new RecordIOOperator())
+            .compose(byteStreamTransformer)
             .observeOn(Rx.compute())
             /* Begin temporary back-pressure */
             .buffer(250, TimeUnit.MILLISECONDS)
